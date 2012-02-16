@@ -11,21 +11,17 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
-import java.net.URISyntaxException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Iterator;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.*;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import org.apache.commons.httpclient.Header;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.*;
@@ -47,7 +43,19 @@ public class HtmlImgRectifier {
     private final HttpClient httpClient;
     private final MessageDigest md5;
 
-    public HtmlImgRectifier(UserStore.Client userStore, AuthenticationResult authResult, NoteStore.Client noteStore) throws TException, ParserConfigurationException, NoSuchAlgorithmException, TransformerConfigurationException {
+    /**
+     * Creates an <tt>HtmlImgRectifier</tt>.
+     *
+     * @param userStore the <tt>UserStore.Client</tt> of the account to be
+     * manipulated; used to renew the <tt>AuthenticationResult</tt>, if
+     * necessary.
+     * @param authResult an unexpired <tt>AuthenticationResult</tt> of the to be
+     * manipulated.
+     * @param noteStore the <tt>NoteStore.Client</tt> of the account to be
+     * manipulated.
+     * @throws Exception
+     */
+    public HtmlImgRectifier(UserStore.Client userStore, AuthenticationResult authResult, NoteStore.Client noteStore) throws Exception {
         this.userStore = userStore;
         this.authResult = authResult;
         this.noteStore = noteStore;
@@ -90,6 +98,11 @@ public class HtmlImgRectifier {
         md5 = MessageDigest.getInstance("MD5");
     }
 
+    /**
+     * Rectifies all {@link Note}s in the account.
+     *
+     * @throws Exception
+     */
     public void rectify() throws Exception {
         LOGGER.debug("getting notebooks");
         List<Notebook> notebooks = noteStore.listNotebooks(authResult.getAuthenticationToken());
@@ -100,6 +113,13 @@ public class HtmlImgRectifier {
         }
     }
 
+    /**
+     * Rectifies the HTML <tt>img</tt>s in a single <tt>Notebook</tt>.
+     *
+     * @param notebook the <tt>Notebook</tt> containing the {@link Note}s to
+     * rectify.
+     * @throws Exception
+     */
     public void rectify(Notebook notebook) throws Exception {
         LOGGER.debug("rectifying notebook {}: {}", notebook.getGuid(), notebook.getName());
 
@@ -109,6 +129,14 @@ public class HtmlImgRectifier {
         rectify(filter);
     }
 
+    /**
+     * Rectifies the HTML <tt>img</tt>s in <tt>Note</tt>s matching a
+     * <tt>NoteFilter</tt>.
+     *
+     * @param filter a <tt>NoteFilter</tt> specifying the <tt>Note</tt>s to
+     * rectify.
+     * @throws Exception
+     */
     public void rectify(NoteFilter filter) throws Exception {
         LOGGER.debug("rectifying notes matching filter");
 
@@ -129,6 +157,12 @@ public class HtmlImgRectifier {
         } while (start >= 0);
     }
 
+    /**
+     * Rectifies the HTML <tt>img</tt>s in a single <tt>Note</tt>.
+     *
+     * @param note the <tt>Note</tt> to rectify.
+     * @throws Exception
+     */
     public void rectify(Note note) throws Exception {
         LOGGER.debug("rectifying note {}: {}", note.getGuid(), note.getTitle());
 
@@ -182,7 +216,16 @@ public class HtmlImgRectifier {
         }
     }
 
-    private Resource makeResource(String url) throws IOException, URISyntaxException {
+    /**
+     * Creates a <tt>Resource</tt> from the given URL.
+     *
+     * @param url the URL from which the resource's content should be obtained.
+     * @return a <tt>Resource</tt> containing the URL's content, or
+     * <tt>null</tt> if the URL could not be obtained (due to an unsupported
+     * scheme, 404, etc.).
+     * @throws IOException if an error occurs while fetching the resource.
+     */
+    private Resource makeResource(String url) throws IOException {
         if (url.startsWith("file://")) {
             LOGGER.warn("file:// scheme is not supported");
             return null;
@@ -217,6 +260,18 @@ public class HtmlImgRectifier {
         return resource;
     }
 
+    /**
+     * Populates an <tt>en-media</tt> element's attributes with those of the
+     * <tt>img</tt> it's replacing. The acceptable <tt>en-media</tt> attributes
+     * are enumerated in <a
+     * href="http://www.evernote.com/about/developer/api/evernote-api.htm#_Toc297053074">
+     * Evernote API Overview, Evernote Markup Language (ENML), EN-MEDIA</a>.
+     *
+     * @param enMedia the <tt>en-media</tt> element.
+     * @param resource the resource which this <tt>en-media</tt> element.
+     * references.
+     * @param attributes the attributes of the <tt>img</tt> being replaced.
+     */
     private void populateEnMedia(Element enMedia, Resource resource, NamedNodeMap attributes) {
         byte[] hash = resource.getData().getBodyHash();
 
@@ -225,9 +280,11 @@ public class HtmlImgRectifier {
             sb.append(String.format("%02x", hash[i]));
         }
 
+        // mandatory attributes
         enMedia.setAttribute("hash", sb.toString());
         enMedia.setAttribute("type", resource.getMime());
 
+        // optional img attributes
         populateEnMediaAttribute(enMedia, attributes, "align");
         populateEnMediaAttribute(enMedia, attributes, "alt");
         populateEnMediaAttribute(enMedia, attributes, "longdesc");
@@ -238,6 +295,7 @@ public class HtmlImgRectifier {
         populateEnMediaAttribute(enMedia, attributes, "vspace");
         populateEnMediaAttribute(enMedia, attributes, "usemap");
 
+        // optional XHTML attributes
         populateEnMediaAttribute(enMedia, attributes, "style");
         populateEnMediaAttribute(enMedia, attributes, "title");
         populateEnMediaAttribute(enMedia, attributes, "lang");
