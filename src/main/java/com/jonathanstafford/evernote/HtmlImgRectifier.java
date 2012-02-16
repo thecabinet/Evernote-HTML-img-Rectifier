@@ -1,5 +1,7 @@
 package com.jonathanstafford.evernote;
 
+import com.evernote.edam.error.EDAMSystemException;
+import com.evernote.edam.error.EDAMUserException;
 import com.evernote.edam.notestore.NoteFilter;
 import com.evernote.edam.notestore.NoteList;
 import com.evernote.edam.notestore.NoteStore;
@@ -14,6 +16,7 @@ import java.io.StringWriter;
 import java.security.MessageDigest;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.*;
@@ -22,6 +25,7 @@ import javax.xml.transform.stream.StreamResult;
 import org.apache.commons.httpclient.Header;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.methods.GetMethod;
+import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.*;
@@ -36,7 +40,8 @@ public class HtmlImgRectifier {
     public static final String USER_AGENT = NAME + "/" + VERSION;
     private static final Logger LOGGER = LoggerFactory.getLogger(HtmlImgRectifier.class);
     private final UserStore.Client userStore;
-    private final AuthenticationResult authResult;
+    private AuthenticationResult authResult;
+    private long authResultExpirationTime;
     private final NoteStore.Client noteStore;
     private final DocumentBuilder documentBuilder;
     private final Transformer transformer;
@@ -49,8 +54,8 @@ public class HtmlImgRectifier {
      * @param userStore the <tt>UserStore.Client</tt> of the account to be
      * manipulated; used to renew the <tt>AuthenticationResult</tt>, if
      * necessary.
-     * @param authResult an unexpired <tt>AuthenticationResult</tt> of the to be
-     * manipulated.
+     * @param authResult a freshly created <tt>AuthenticationResult</tt> of the
+     * to be manipulated.
      * @param noteStore the <tt>NoteStore.Client</tt> of the account to be
      * manipulated.
      * @throws Exception
@@ -58,6 +63,7 @@ public class HtmlImgRectifier {
     public HtmlImgRectifier(UserStore.Client userStore, AuthenticationResult authResult, NoteStore.Client noteStore) throws Exception {
         this.userStore = userStore;
         this.authResult = authResult;
+        authResultExpirationTime = System.currentTimeMillis() + authResult.getExpiration() - authResult.getCurrentTime();
         this.noteStore = noteStore;
 
         // doublecheck that we can talk to the server, since the user might pass
@@ -105,7 +111,7 @@ public class HtmlImgRectifier {
      */
     public void rectify() throws Exception {
         LOGGER.debug("getting notebooks");
-        List<Notebook> notebooks = noteStore.listNotebooks(authResult.getAuthenticationToken());
+        List<Notebook> notebooks = noteStore.listNotebooks(getAuthToken());
         LOGGER.trace("got {} notebook(s)", notebooks.size());
 
         for (Notebook notebook : notebooks) {
@@ -142,7 +148,7 @@ public class HtmlImgRectifier {
 
         int start = 0;
         do {
-            NoteList noteList = noteStore.findNotes(authResult.getAuthenticationToken(), filter, start, 100);
+            NoteList noteList = noteStore.findNotes(getAuthToken(), filter, start, 100);
             Iterator<Note> iter = noteList.getNotesIterator();
             while (iter.hasNext()) {
                 Note note = iter.next();
@@ -166,7 +172,7 @@ public class HtmlImgRectifier {
     public void rectify(Note note) throws Exception {
         LOGGER.debug("rectifying note {}: {}", note.getGuid(), note.getTitle());
 
-        String content = noteStore.getNoteContent(authResult.getAuthenticationToken(), note.getGuid());
+        String content = noteStore.getNoteContent(getAuthToken(), note.getGuid());
         LOGGER.info(content);
         ByteArrayInputStream bais = new ByteArrayInputStream(content.getBytes());
         Document doc = documentBuilder.parse(bais);
@@ -212,7 +218,7 @@ public class HtmlImgRectifier {
             note.setContentLengthIsSet(false);
             note.setContent(writer.getBuffer().toString());
 
-            noteStore.updateNote(authResult.getAuthenticationToken(), note);
+            noteStore.updateNote(getAuthToken(), note);
         }
     }
 
@@ -308,5 +314,16 @@ public class HtmlImgRectifier {
         if (node != null) {
             enMedia.setAttribute(name, node.getNodeValue());
         }
+    }
+
+    private String getAuthToken() throws EDAMUserException, EDAMSystemException, TException {
+        if (authResultExpirationTime - System.currentTimeMillis() < TimeUnit.MINUTES.toMillis(15)) {
+            LOGGER.debug("refreshing AuthenticationResult...");
+            authResult = userStore.refreshAuthentication(authResult.getAuthenticationToken());
+            authResultExpirationTime = System.currentTimeMillis() + authResult.getExpiration() - authResult.getCurrentTime();
+            LOGGER.info("refreshed AuthenitcationResult; next expiration is at {}", authResultExpirationTime);
+        }
+
+        return authResult.getAuthenticationToken();
     }
 }
