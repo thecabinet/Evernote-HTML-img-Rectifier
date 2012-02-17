@@ -57,7 +57,6 @@ public class Driver {
 
         THttpClient userStoreTrans = new THttpClient(options.getUserStoreURL());
         userStoreTrans.setCustomHeader("User-Agent", HtmlImgRectifier.USER_AGENT);
-
         TBinaryProtocol userStoreProt = new TBinaryProtocol(userStoreTrans);
         UserStore.Client userStore = new UserStore.Client(userStoreProt, userStoreProt);
 
@@ -95,15 +94,12 @@ public class Driver {
         String shardId = user.getShardId();
 
         THttpClient noteStoreTrans = new THttpClient(options.getNoteStoreURL(shardId));
-
         noteStoreTrans.setCustomHeader("User-Agent", HtmlImgRectifier.USER_AGENT);
         TBinaryProtocol noteStoreProt = new TBinaryProtocol(noteStoreTrans);
-
         NoteStore.Client noteStore = new NoteStore.Client(noteStoreProt, noteStoreProt);
 
         HtmlImgRectifier rectifier = new HtmlImgRectifier(userStore, authResult, noteStore);
         rectifier.rectify();
-
     }
 
     private static class Options {
