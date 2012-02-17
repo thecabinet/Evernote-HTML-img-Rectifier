@@ -3,7 +3,6 @@ package com.jonathanstafford.evernote;
 import com.evernote.edam.error.EDAMErrorCode;
 import com.evernote.edam.error.EDAMUserException;
 import com.evernote.edam.notestore.NoteStore;
-import com.evernote.edam.type.Note;
 import com.evernote.edam.type.User;
 import com.evernote.edam.userstore.AuthenticationResult;
 import static com.evernote.edam.userstore.Constants.*;
@@ -130,19 +129,6 @@ public class Driver {
         TBinaryProtocol noteStoreProt = new TBinaryProtocol(noteStoreTrans);
 
         NoteStore.Client noteStore = new NoteStore.Client(noteStoreProt, noteStoreProt);
-
-
-        Note note = new Note();
-        note.setContent(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">\n"
-                + "<en-note>\n"
-                + "<img src=\"http://art.penny-arcade.com/photos/i-t9PJNn8/0/L/i-t9PJNn8-XL.jpg\"></img>\n"
-                + "</en-note>");
-        note.setNotebookGuid("26ec19f4-f2f7-43b9-b65f-e432c898b88d");
-        note.setTitle("The Waiting Game (" + System.currentTimeMillis() / 1000 + ")");
-        noteStore.createNote(authToken, note);
-
 
         HtmlImgRectifier rectifier = new HtmlImgRectifier(userStore, authResult, noteStore);
         rectifier.rectify();
