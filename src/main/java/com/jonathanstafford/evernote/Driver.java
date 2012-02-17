@@ -72,57 +72,28 @@ public class Driver {
             String username = options.username;
             String password = options.password;
             authResult = userStore.authenticate(username, password, CONSUMER_KEY, CONSUMER_SECRET);
-        } catch (EDAMUserException ex) {
-            // Note that the error handling here is far more detailed than you would 
-            // provide to a real user. It is intended to give you an idea of why the 
-            // sample application isn't able to authenticate to our servers.
-
-            // Any time that you contact us about a problem with an Evernote API, 
-            // please provide us with the exception parameter and errorcode. 
-            String parameter = ex.getParameter();
-            EDAMErrorCode errorCode = ex.getErrorCode();
+        } catch (EDAMUserException e) {
+            String parameter = e.getParameter();
+            EDAMErrorCode errorCode = e.getErrorCode();
 
             System.err.println("Authentication failed (parameter: " + parameter + " errorCode: " + errorCode + ")");
 
             if (errorCode == EDAMErrorCode.INVALID_AUTH) {
                 if (parameter.equals("consumerKey")) {
-                    if (CONSUMER_KEY.equals("en-edamtest")) {
-                        System.err.println("You must replace the variables consumerKey and consumerSecret with the values you received from Evernote.");
-                    } else {
-                        System.err.println("Your consumer key was not accepted by " + options.getEvernoteHost());
-                        System.err.println("This sample client application requires a client API key. If you requested a web service API key, you must authenticate using OAuth as shown in sample/java/oauth");
-                    }
-                    System.err.println("If you do not have an API Key from Evernote, you can request one from http://www.evernote.com/about/developer/api");
+                    System.err.println("the api key was not accepted!  is it activated for " + options.getEvernoteHost() + "?");
                 } else if (parameter.equals("username")) {
-                    System.err.println("You must authenticate using a username and password from " + options.getEvernoteHost());
-                    if (options.getEvernoteHost().equals("www.evernote.com") == false) {
-                        System.err.println("Note that your production Evernote account will not work on " + options.getEvernoteHost() + ",");
-                        System.err.println("you must register for a separate test account at https://" + options.getEvernoteHost() + "/Registration.action");
-                    }
+                    System.err.println("'" + options.username + "' is not a valid username");
                 } else if (parameter.equals("password")) {
-                    System.err.println("The password that you entered is incorrect");
+                    System.err.println("the password for " + options.username + " was invalid");
                 }
             }
 
             System.exit(1);
         }
 
-        // The result of a succesful authentication is an opaque authentication token
-        // that you will use in all subsequent API calls. If you are developing a
-        // web application that authenticates using OAuth, the OAuth access token
-        // that you receive would be used as the authToken in subsquent calls.
-        String authToken = authResult.getAuthenticationToken();
-
-        // The Evernote NoteStore allows you to accessa user's notes.    
-        // In order to access the NoteStore for a given user, you need to know the 
-        // logical "shard" that their notes are stored on. The shard ID is included 
-        // in the URL used to access the NoteStore.
         User user = authResult.getUser();
         String shardId = user.getShardId();
 
-        System.out.println("Successfully authenticated as " + user.getUsername());
-
-        // Set up the NoteStore client 
         THttpClient noteStoreTrans = new THttpClient(options.getNoteStoreURL(shardId));
 
         noteStoreTrans.setCustomHeader("User-Agent", HtmlImgRectifier.USER_AGENT);
