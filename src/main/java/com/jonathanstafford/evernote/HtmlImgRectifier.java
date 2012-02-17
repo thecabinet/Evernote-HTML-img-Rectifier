@@ -245,6 +245,7 @@ public class HtmlImgRectifier {
         }
 
         ResourceAttributes resourceAttributes = new ResourceAttributes();
+        resourceAttributes.setAttachment(false);
         resourceAttributes.setClientWillIndex(false);
         resourceAttributes.setSourceURL(url);
 
