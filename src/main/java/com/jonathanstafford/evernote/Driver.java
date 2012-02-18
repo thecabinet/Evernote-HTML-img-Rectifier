@@ -11,6 +11,7 @@ import com.evernote.edam.userstore.UserStore;
 import java.io.IOError;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -102,6 +103,14 @@ public class Driver {
 
         HtmlImgRectifier rectifier = new HtmlImgRectifier(userStore, authResult, noteStore);
 
+        if (options.ctime != null) {
+            rectifier.setCreatedTime(options.ctime);
+        }
+
+        if (options.mtime != null) {
+            rectifier.setUpdatedTime(options.mtime);
+        }
+
         if (options.notebook != null) {
             List<Notebook> notebooks = noteStore.listNotebooks(authResult.getAuthenticationToken());
             for (Notebook notebook : notebooks) {
@@ -126,6 +135,10 @@ public class Driver {
         public boolean sandbox = false;
         @Option(required = false, name = "--notebook", aliases = {"-n"}, usage = "only processes notes in the notebook with the specified name")
         public String notebook;
+        @Option(required = false, name = "--created", aliases = {"-c"}, usage = "only processes notes created since the specified time", handler = DateOptionHandler.class)
+        public Date ctime;
+        @Option(required = false, name = "--updated", aliases = {"-u"}, usage = "only processes notes updated since the specified time", handler = DateOptionHandler.class)
+        public Date mtime;
         @Argument(required = true, index = 0, metaVar = "username", usage = "username")
         public String username;
         @Argument(required = true, index = 1, metaVar = "password", usage = "password")
