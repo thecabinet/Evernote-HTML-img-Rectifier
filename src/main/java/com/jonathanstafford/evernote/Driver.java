@@ -3,6 +3,7 @@ package com.jonathanstafford.evernote;
 import com.evernote.edam.error.EDAMErrorCode;
 import com.evernote.edam.error.EDAMUserException;
 import com.evernote.edam.notestore.NoteStore;
+import com.evernote.edam.type.Notebook;
 import com.evernote.edam.type.User;
 import com.evernote.edam.userstore.AuthenticationResult;
 import static com.evernote.edam.userstore.Constants.*;
@@ -10,6 +11,7 @@ import com.evernote.edam.userstore.UserStore;
 import java.io.IOError;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Properties;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.THttpClient;
@@ -99,7 +101,21 @@ public class Driver {
         NoteStore.Client noteStore = new NoteStore.Client(noteStoreProt, noteStoreProt);
 
         HtmlImgRectifier rectifier = new HtmlImgRectifier(userStore, authResult, noteStore);
-        rectifier.rectify();
+
+        if (options.notebook != null) {
+            List<Notebook> notebooks = noteStore.listNotebooks(authResult.getAuthenticationToken());
+            for (Notebook notebook : notebooks) {
+                if (notebook.getName().equals(options.notebook)) {
+                    rectifier.rectify(notebook);
+                    System.exit(0);
+                }
+            }
+
+            System.err.println("couldn't find a Notebook named '" + options.notebook + "'");
+            System.exit(2);
+        } else {
+            rectifier.rectify();
+        }
     }
 
     private static class Options {
@@ -108,6 +124,8 @@ public class Driver {
         public boolean help = false;
         @Option(required = false, name = "--sandbox", aliases = {"-s"}, usage = "uses the Evernote sandbox instance (for development)")
         public boolean sandbox = false;
+        @Option(required = false, name = "--notebook", aliases = {"-n"}, usage = "only processes notes in the notebook with the specified name")
+        public String notebook;
         @Argument(required = true, index = 0, metaVar = "username", usage = "username")
         public String username;
         @Argument(required = true, index = 1, metaVar = "password", usage = "password")
