@@ -111,19 +111,26 @@ public class Driver {
             rectifier.setUpdatedTime(options.mtime);
         }
 
-        if (options.notebook != null) {
-            List<Notebook> notebooks = noteStore.listNotebooks(authResult.getAuthenticationToken());
-            for (Notebook notebook : notebooks) {
-                if (notebook.getName().equals(options.notebook)) {
-                    rectifier.rectify(notebook);
-                    System.exit(0);
-                }
-            }
+        rectifier.setReserveUpload(options.reservedUpload);
 
-            System.err.println("couldn't find a Notebook named '" + options.notebook + "'");
-            System.exit(2);
-        } else {
-            rectifier.rectify();
+        try {
+            if (options.notebook != null) {
+                List<Notebook> notebooks = noteStore.listNotebooks(authResult.getAuthenticationToken());
+                for (Notebook notebook : notebooks) {
+                    if (notebook.getName().equals(options.notebook)) {
+                        rectifier.rectify(notebook);
+                        System.exit(0);
+                    }
+                }
+
+                System.err.println("couldn't find a Notebook named '" + options.notebook + "'");
+                System.exit(2);
+            } else {
+                rectifier.rectify();
+            }
+        } catch (UploadExhaustedException e) {
+            System.err.println("aborting execution because " + e.getMessage());
+            System.exit(3);
         }
     }
 
@@ -139,6 +146,8 @@ public class Driver {
         public Date ctime;
         @Option(required = false, name = "--updated", aliases = {"-u"}, usage = "only processes notes updated since the specified time", handler = DateOptionHandler.class)
         public Date mtime;
+        @Option(required = false, name = "--reserve", aliases = {"-r"}, usage = "reserved the specified amount amount for use not by this program")
+        public long reservedUpload = 0;
         @Argument(required = true, index = 0, metaVar = "username", usage = "username")
         public String username;
         @Argument(required = true, index = 1, metaVar = "password", usage = "password")

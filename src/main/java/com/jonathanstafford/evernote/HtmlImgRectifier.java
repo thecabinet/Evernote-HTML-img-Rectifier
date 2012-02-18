@@ -48,6 +48,9 @@ public class HtmlImgRectifier {
     private final MessageDigest md5;
     private long ctime;
     private long mtime;
+    private final long uploadLimit;
+    private long uploaded;
+    private long reservedUpload;
 
     /**
      * Creates an <tt>HtmlImgRectifier</tt>.
@@ -105,6 +108,10 @@ public class HtmlImgRectifier {
         md5 = MessageDigest.getInstance("MD5");
 
         ctime = mtime = -1;
+
+        uploadLimit = userStore.getUser(getAuthToken()).getAccounting().getUploadLimit();
+        uploaded = noteStore.getSyncState(getAuthToken()).getUploaded();
+        reservedUpload = 0;
     }
 
     /**
@@ -127,6 +134,18 @@ public class HtmlImgRectifier {
      */
     public void setUpdatedTime(Date mtime) {
         this.mtime = mtime.getTime();
+    }
+
+    /**
+     * Reserves the specified amount of upload, which should be free when the
+     * program completes execution. Because it's not possible (ed: is that
+     * true?) to know the exact size of a note before uploading it, it's
+     * possible that slightly less upload will be available.
+     *
+     * @param numBytes the desired amount of free upload upon termination.
+     */
+    public void setReserveUpload(long numBytes) {
+        this.reservedUpload = numBytes;
     }
 
     /**
@@ -220,6 +239,7 @@ public class HtmlImgRectifier {
             return;
         }
 
+        long noteSize = 0;
         boolean updateNeeded = false;
         for (int i = 0; i < imgs.getLength(); i++) {
             Node img = imgs.item(i);
@@ -234,6 +254,7 @@ public class HtmlImgRectifier {
                 updateNeeded = true;
             }
             note.addToResources(resource);
+            noteSize += resource.getData().getSize();
 
             Element media = doc.createElement("en-media");
             populateEnMedia(media, resource, attributes);
@@ -251,11 +272,23 @@ public class HtmlImgRectifier {
 
             transformer.transform(source, result);
 
+            // the following is very wrong, as length() returns the number of
+            // UTF-16 codepoints in the String, but the resulting XML document
+            // is in fact UTF-8 encoded.  I'm not sure there's any non-terrible
+            // way to determine the XML's actual size...
+            noteSize += writer.getBuffer().length();
+
+            if (uploadLimit - uploaded - noteSize < reservedUpload) {
+                throw new UploadExhaustedException(uploadLimit, uploaded, noteSize, uploaded);
+            }
+
             note.setContentHashIsSet(false);
             note.setContentLengthIsSet(false);
             note.setContent(writer.getBuffer().toString());
 
             noteStore.updateNote(getAuthToken(), note);
+
+            uploaded = noteStore.getSyncState(getAuthToken()).getUploaded();
         }
     }
 
