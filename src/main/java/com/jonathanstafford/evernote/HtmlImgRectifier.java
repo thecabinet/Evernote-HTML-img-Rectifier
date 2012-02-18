@@ -2,9 +2,7 @@ package com.jonathanstafford.evernote;
 
 import com.evernote.edam.error.EDAMSystemException;
 import com.evernote.edam.error.EDAMUserException;
-import com.evernote.edam.notestore.NoteFilter;
-import com.evernote.edam.notestore.NoteList;
-import com.evernote.edam.notestore.NoteStore;
+import com.evernote.edam.notestore.*;
 import com.evernote.edam.type.*;
 import com.evernote.edam.userstore.AuthenticationResult;
 import com.evernote.edam.userstore.Constants;
@@ -14,6 +12,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.security.MessageDigest;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +46,8 @@ public class HtmlImgRectifier {
     private final Transformer transformer;
     private final HttpClient httpClient;
     private final MessageDigest md5;
+    private long ctime;
+    private long mtime;
 
     /**
      * Creates an <tt>HtmlImgRectifier</tt>.
@@ -102,6 +103,30 @@ public class HtmlImgRectifier {
 
         httpClient = new HttpClient();
         md5 = MessageDigest.getInstance("MD5");
+
+        ctime = mtime = -1;
+    }
+
+    /**
+     * Sets the earliest {@link Note} {@link Note#getCreated() created time}
+     * that will be processed; notes created before the specified time will not
+     * be examined. If not set, no filtering by created time will occur.
+     *
+     * @param ctime the earliest created time to process.
+     */
+    public void setCreatedTime(Date ctime) {
+        this.ctime = ctime.getTime();
+    }
+
+    /**
+     * Sets the earliest {@link Note} {@link Note#getUpdated() updated time}
+     * that will be processed; notes last updated before the specified time will
+     * not be examined. If not set, no filtering by created time will occur.
+     *
+     * @param ctime the earliest updated time to process.
+     */
+    public void setUpdatedTime(Date mtime) {
+        this.mtime = mtime.getTime();
     }
 
     /**
@@ -146,34 +171,46 @@ public class HtmlImgRectifier {
     public void rectify(NoteFilter filter) throws Exception {
         LOGGER.debug("rectifying notes matching filter");
 
-        int start = 0;
+        NotesMetadataResultSpec spec = new NotesMetadataResultSpec();
+        spec.setIncludeCreated(true);
+        spec.setIncludeUpdated(true);
+
+        int offset = 0;
         do {
-            NoteList noteList = noteStore.findNotes(getAuthToken(), filter, start, 100);
-            Iterator<Note> iter = noteList.getNotesIterator();
+            NotesMetadataList notesMetadataList =
+                    noteStore.findNotesMetadata(getAuthToken(), filter, offset, 100, spec);
+
+            Iterator<NoteMetadata> iter = notesMetadataList.getNotesIterator();
             while (iter.hasNext()) {
-                Note note = iter.next();
-                rectify(note);
+                NoteMetadata noteMetadata = iter.next();
+
+                if (noteMetadata.getCreated() >= ctime
+                        || noteMetadata.getUpdateSequenceNum() >= mtime) {
+                    Note note = noteStore.getNote(getAuthToken(), noteMetadata.getGuid(), true, false, false, false);
+                    rectify(note);
+                }
             }
 
-            if (noteList.getNotesSize() == 0) {
-                start = -1;
-            } else {
-                start += noteList.getNotesSize();
+            offset += notesMetadataList.getNotesSize();
+            if (offset == notesMetadataList.getTotalNotes()) {
+                offset = -1;
             }
-        } while (start >= 0);
+        } while (offset >= 0);
     }
 
     /**
      * Rectifies the HTML <tt>img</tt>s in a single <tt>Note</tt>.
      *
-     * @param note the <tt>Note</tt> to rectify.
+     * @param note the <tt>Note</tt> to rectify, which must include the content.
      * @throws Exception
      */
     public void rectify(Note note) throws Exception {
         LOGGER.debug("rectifying note {}: {}", note.getGuid(), note.getTitle());
+        if (!note.isSetContent()) {
+            throw new IllegalArgumentException("Notes passed to rectify(Note) must have their content");
+        }
 
-        String content = noteStore.getNoteContent(getAuthToken(), note.getGuid());
-        LOGGER.info(content);
+        String content = note.getContent();
         ByteArrayInputStream bais = new ByteArrayInputStream(content.getBytes());
         Document doc = documentBuilder.parse(bais);
         NodeList imgs = doc.getElementsByTagName("img");
